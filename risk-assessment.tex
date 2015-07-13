@@ -99,33 +99,6 @@
   http://ilearnstack.com/2013/04/26/
 \end {frame}
 
-\begin{frame}{Trove Uses Tokens}
-  \begin{block}{}
-    \includegraphics[scale=0.2]{Reddwarf-overview.jpeg}
-  \end{block}
-  https://wiki.openstack.org/wiki/Trove/trove-diagrams
-\end {frame}
-
-\begin{frame}{Sahara Uses}
-  \begin{block}{}
-    \includegraphics[scale=0.3]{sahara-architecture.png}
-  \end{block}
-  http://docs.openstack.org/developer/sahara/architecture.html
-\end {frame}
-
-\begin{frame}{Solum and Heat Use Tokens}
-  \begin{block}{}
-    \includegraphics[scale=0.3]{solum-arch.png}
-  \end{block}
-  http://solum.io/img/chart.png
-\end {frame}
-
-\begin{frame}{Barbican Uses Tokens}
-  \begin{block}{}
-    \includegraphics[scale=0.3]{barbican-arch.png}
-  \end{block}
-  https://github.com/cloudkeep/barbican/wiki/Architecture
-\end {frame}
 
 \begin{frame}{Big Tent Services that User Tokens}
   \begin{columns}[t,onlytextwidth]
@@ -179,6 +152,37 @@
 \end{frame}
 
 
+
+\begin{frame}{Trove Uses Tokens}
+  \begin{block}{}
+    \includegraphics[scale=0.2]{Reddwarf-overview.jpeg}
+  \end{block}
+  https://wiki.openstack.org/wiki/Trove/trove-diagrams
+\end {frame}
+
+\begin{frame}{Sahara Uses}
+  \begin{block}{}
+    \includegraphics[scale=0.3]{sahara-architecture.png}
+  \end{block}
+  http://docs.openstack.org/developer/sahara/architecture.html
+\end {frame}
+
+\begin{frame}{Solum and Heat Use Tokens}
+  \begin{block}{}
+    \includegraphics[scale=0.3]{solum-arch.png}
+  \end{block}
+  http://solum.io/img/chart.png
+\end {frame}
+
+\begin{frame}{Barbican Uses Tokens}
+  \begin{block}{}
+    \includegraphics[scale=0.3]{barbican-arch.png}
+  \end{block}
+  https://github.com/cloudkeep/barbican/wiki/Architecture
+\end {frame}
+
+
+
 \section {Use Cases}
 
 \begin{frame}{Scope of a Token}
@@ -189,9 +193,6 @@
     \item A scoped token used on any service is valid for any \textit{\_member\_ } command anywhere else in the OpenStack Deployment
   \end{itemize}
 \end{frame}
-
-
-
 
 
 \begin{frame}{Member Use Cases}
@@ -303,7 +304,7 @@
 \end{frame}
 
 
-
+\section {Design Considerations}
 
 \begin{frame}{Constraints}
   \begin{itemize}
@@ -356,14 +357,6 @@
 \end{frame}
 
 
-\begin{frame}{Better Global Admin}
-  \begin{itemize}
-  \item Global admin means user is in admin role on admin domain
-  \item In order to test that outside of Keystone server, we need to be able to query Keystone config remotely
-Added Benefit: allows a way to query default domain as well
-  \end{itemize}
-\end{frame}
-
 
 \begin{frame}{Where is the Scope}
   \begin{itemize}
@@ -410,8 +403,6 @@ Added Benefit: allows a way to query default domain as well
 \end{frame}
 
 
-
-
 \begin{frame}Neutron Policy Rules{}
   \begin{itemize}
   \item "shared\_*":
@@ -431,33 +422,136 @@ Added Benefit: allows a way to query default domain as well
   \end{itemize}
 \end{frame}
 
-\begin{frame}{}
+\begin{frame}What is a Role?{}
   \begin{itemize}
-  \item
+    \item A label for a set of permissions across multiple services
+    \item But we have no way to share role information between services or endpoints with stock policy files
   \end{itemize}
 \end{frame}
 
-\begin{frame}{}
+\begin{frame}{Problems with Role Assignments today}
   \begin{itemize}
-  \item
+  \item If I can assign one role, I can assign any role
+  \item Admin role is not scoped to a proejct
+  \item If I can assign admin, I am admin
+  \item Need to restrict ability to assignment only the roles/scope a user has assigned to them.
   \end{itemize}
 \end{frame}
 
-\begin{frame}{}
+
+\section {Dynamic Policy}
+
+
+\begin{frame}{Original Dynamic Policy Design}
   \begin{itemize}
-  \item
+  \item Graduate oslo policy to a library
+  \item Common code to enforce policy on a token
+  \item Fetch policy from Keystone
+  \item Provide a unified policy file
+  \item Database schema to hold policy rules.  
+  \item Hierarchical roles
+  \item Generate rules from hierarchical roles
+  \item Break member up into smaller roles.
+  \item Use the smaller roles in the Policy targets.
+  \item Users can only assign a role that they themselves have on the designated scope.
   \end{itemize}
 \end{frame}
 
-\begin{frame}{}
+\begin{frame}{Dynamic Policy Successes}
   \begin{itemize}
-  \item
+  \item Graduate oslo policy to a library complete
+  \item Fetch policy from Keystone no targeted at URLs, not Endpoint Ids
+  \item Kent has Proof of Concept for Database
   \end{itemize}
 \end{frame}
 
-    
-\begin{frame}{Single Policy File}
+
+\begin{frame}{Dynamic Policy Adjustments}
   \begin{itemize}
+  \item Unified Policy File may conflict dynamic natures of microversions
+  \item Hierarchical Roles now includes role namespacing
+  \item Kent design is better for querying
+  \end{itemize}
+\end{frame}
+
+
+\subsection {Policy Distribution}
+
+
+\begin{frame}{Why not Use Configuration Management System}
+  \begin{itemize}
+  \item Can be done, but has drawbacks
+  \item Removes Keystone's ability to determine which policy file to fetch
+  \item Most installations treat Policy as static, and will not update even if Keystone updates
+  \item Extracts Policy out of the application management flow
+  \item In the future, project specifc policy will require futher integration
+  \end{itemize}
+\end{frame}
+
+
+\begin{frame}{Why fetch by URLs}
+  \begin{itemize}
+  \item May not get a unified policy file
+  \item Need to server separate policy for each service
+  \item If customized for a specific server, we need to serve the policy for that server
+  \item While this might be multiple \textit{endpoints}we can treat all endpoints with the same URL as one endpoint for policy reasons
+  \item CMS can calculate the URL prior to registering endpoint
+  \item With endpoint\_id: register, retreive ID, inject into config, restart server
+  \item For most cases, middelware could deduce the URL from a request.
+  \item Why not Free form label?
+    \begin{itemize}
+    \item Might be useful in the future
+    \item Would still require mapping to the endpoint 
+    \end{itemize}
+  \end{itemize}
+\end{frame}
+
+
+\begin{frame}{Where do we fetch?}
+  \begin{itemize}
+  \item Oslo.policy is not specific to RBAC
+  \item Fetching from Keystone is not specific to Oslo.policy
+  \item After token validation
+  \item Before Policy is called
+  \item Using Policy for Endpoint binding in Middleware
+  \end{itemize}
+\end{frame}
+
+
+\begin{frame}{auth\_token vs policy middleware}
+  \begin{itemize}
+  \item auth\_token is purely a convenience, 
+  \item does not require modifying pipelines
+  \item Separate middleware would be cleaner
+  \item Compromise: auth\_token as a series of separateable middleware modules
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Enforce policy from middleware}
+  \begin{itemize}
+  \item enforce policy on URLs, not random strings inside the code
+  \item role/scope split
+    \begin{itemize}
+    \item only the role portion
+    \item this makes the most sense for customization
+    \end{itemize}
+  \item Scope would have to be enforced after database fetch for many resources
+  \item Middleware can return HTTP 401 with extra knowledge of what role is required
+    \begin{itemize}
+    \item Bends the standard, but does not break it
+    \end{itemize}
+  \end{itemize}
+\end{frame}
+
+
+\begin{frame}{Single Unified Policy File}
+  
+  \begin{itemize}
+  \item  \textbf{Not stock policy}
+    \begin{itemize}
+    \item Kept in its own repo
+    \item only deployed deliberately
+    \end {itemize}
   \item Common section for common rules
   \item Specify lowest role necessary
   \item Single Policy Header
@@ -468,43 +562,151 @@ Added Benefit: allows a way to query default domain as well
   \end{itemize}
 \end{frame}
 
-\begin{frame}{Hierarchical roles}
+
+\subsection {Roles}
+
+
+\begin{frame}{Implied Roles}
   \begin{itemize}
-  \item Rule to compose the meaning of the top level role
-  \end{itemize}
-\end{frame}
-
-\subsection{Troubleshooting}
-
-\begin{frame}{What is going on with my policy?}
-  \begin{itemize}
-  \item Tool?
-  \end{itemize}
-\end{frame}
-
-
-
-\subsection{Delegation}
-
-
-\begin{frame}{Using Trusts}
-  \begin{itemize}
-  \item Trust still requires Trustee to authenticate
-  \item Use For operations handed-off from one user to another
+  \item Hierarchical is overloaded term but what NIST uses
+  \item Implied roles:
+    \begin{itemize}
+    \item Explicit-role IMPLIES Implicit-Role
+    \item Impicit Roles can IMPLY other Implicit-Roles
+    \item Admin IMPLIES Member
+    \item Member IMPLIES both Read-Only and Writeable
+    \end{itemize}
+  \item A user is assigned a role at the top of the hierarchy
+  \item A target specifies a role as low on the hierarchy as possible
+  \item A user can then delegate an implicit role instead of explicit
   \end{itemize}
 \end{frame}
 
 
-\section {Coming attractions}
-
-\begin{frame}{Future Work}
+\begin{frame}{Global Admin}
   \begin{itemize}
-    \item Add to the policy library the essential code to enforce policy based on a keystone token.
-    \item fetch policy.json file from Keystone
-    \item Default Policy
-    \item Dabase Management of Policy Rules
-    \item Use Hiererachical defintions to generate rules for roles
-    \item Unified Delegation:  A user can only assign a role that they themselves have assigned on the designated scope.
+  \item   Better Global Admin
+    \begin{itemize}
+    \item Global admin means user is in admin role on admin domain
+    \item In order to test that outside of Keystone server, we need to be able to query Keystone config remotely
+      Added Benefit: allows a way to query default domain as well
+    \end{itemize}
+  \item Alternative to Global Admin
+    \begin{itemize}
+    \item Provide a means for a specific user to get a token scoped to any project with any role
+    \item Is it really any worse?
+    \end{itemize}
+  \end{itemize}
+\end{frame}
+
+
+\begin{frame}{Role Namespaces}
+  \begin{itemize}
+  \item Roles are lables.
+  \item Currently, all roles are global
+  \item Roles hould map to the services
+    \begin{itemize}
+    \item \textit{Admin} versus \textit{Compute.admin, network.admin}
+    \end{itemize}
+  \item Implied roles can still work across namespaces
+    \begin{itemize}
+    \item Compute.boot implies network.reader
+    \end{itemize}
+  \item Can expand the role of Keystone beyond Undercloud:
+    \begin{itemize}
+    \item \textit{Wordpress.editor}
+    \item \textit{Gerrit.approver}  implies \textit{Git.committer}
+    \end{itemize}
+  \item Segregated by Project Scope as well
+    \begin{itemize}
+    \item \textit{Gerrit.approver} on \textit{Openstack/Keystone} vs
+    \item \textit{Gerrit.approver} on \textit{Openstack/Nova}
+    \end{itemize}
+  \end{itemize}
+\end{frame}
+
+
+\begin{frame}{Scope All Entities}
+  \begin{itemize}
+  \item Keystone Service level entities be owned by the Admin Domain
+    \begin{itemize}
+    \item Services
+    \item Endpoint
+    \item Regions
+    \item Roles
+    \end{itemize}
+  \item Lends itself to better delegation in the future
+    \begin{itemize}
+    \item Scope Roles under services to Namespace
+    \end{itemize}
+  \end{itemize}
+\end{frame}
+
+
+
+
+
+\begin{frame}{How Do We Know What Permissions to Delegate?}
+  \begin{itemize}
+  \item Changes are rare enough that we can figure out statically
+  \item When doing a Nova Boot, the Nova client can be smart enough to get the right token.
+  \item All those things that call Nova boot need to be smart enought, too
+  \item As things get more complicated, we can run Tempest against policy in permissive mode and see what would have gotten rejected.
+    \begin{itemize}
+    \item This approach works for SELinux and AppArmor
+    \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Requesting a Token with a subset 	of roles}
+  \begin{itemize}
+  \item Request only the role required for the task at hand
+  \item ``I need a token for booting a VM''
+  \item Ideally, a token would have only a single role
+    \begin{itemize}
+    \item Added Benefit: Fernet-style token implementations smaller
+    \end{itemize}
+  \end{itemize}
+\end{frame}
+
+
+\begin{frame}{Long lived delegations}
+  \begin{itemize}
+  \item shorter the token lifespan  = smaller attack surface
+  \item No risk of timing out on long uploads etc
+  \item Nova could request a read only token for other services during boot.
+  \item Trusts and OAUTH1 should use the same logic
+    \begin{itemize}
+    \item OAUTH Consumer becomes user in a custom domain
+    \end{itemize}
+  \end{itemize}
+\end{frame}
+
+
+\begin{frame}{Unified Delegation}
+  \begin{itemize}
+  \item Role assignment Follows Trust model except we add concept of \textit{Position} or permanent role assignment
+    \begin{itemize}
+    \item A user is assigned to a \textit{position}
+    \item All permanent role assigments happen from \textit{position} to \textit{position}
+    \item A user can only delegate to a \textit{position} a role that they themself are assigned,either explicitly or implicitly
+    \item If a \textit{position} goes unfilled, role assignments previously made from that \textit{position} are:
+      \begin{itemize}
+      \item inactive until it is filled again, or
+      \item are approved by a higher authority
+      \end{itemize}
+    \end{itemize}
+  \end{itemize}
+\end{frame}
+
+    
+
+\begin{frame}{Task Ordering}
+  \begin{itemize}
+  \item Each commit should show value stand alone
+  \item Front load the changes that must be approved by the other projects
+  \item Start with dynamic fetch, manual management
+  \item Continue to refine the plan
   \end{itemize}
 \end{frame}
 
