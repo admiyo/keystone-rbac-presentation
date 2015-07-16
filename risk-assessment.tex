@@ -6,6 +6,22 @@
 
 \usetheme{CambridgeUS}
 \logo{\includegraphics[scale=0.1]{redhat-logo.jpg}}
+
+
+\AtBeginSection[]{
+  \frametitle{Agenda}
+  Agenda
+  \tableofcontents[currentsection, currentsubsection]
+}
+
+\AtBeginSubsection{
+  \frametitle{Agenda}
+  Agenda
+  \tableofcontents[currentsection,currentsubsection]
+}
+
+
+
 \title[OpenStack Liberty Keystone Midcycle ]{ Risk Assessment and Mitigation for Access Control mechanisms in OpenStack.
 }
 \author{Adam Young}
@@ -35,35 +51,31 @@
 \end{frame}
 
 
-\section{Threat Assessment}
+\section{Risk Assessment}
 
 
-\begin{frame}{Hypervisor Compromise: Tokens }
+\begin{frame}{Threats}
   \begin{itemize}
-  \item validates the token
-  \item Nova Compute Runs on the Hypervisor
-  \item Tokens included included in requests
-  \item Rogue VM Harvest Tokens
-  \end{itemize}
-\end{frame}
-
-
-\begin{frame}{Hypervisor Compromise: Trusts}
-  \begin{itemize}
-  \item Allow for a long term delegation
-  \item A rogue trust would by-pass the token expiry
-  \item Without Trusts, passwords will be copied around, which is even worse.
-  \item Easy to identify but you have to look
-  \end{itemize}
-\end{frame}
-
-
-\begin{frame}{Authenticate via Token when fetching a token}
-  \begin{itemize}
-  \item Risk
+  \item Hypervisor Compromise: Tokens
+    \begin{itemize}
+    \item validates the token
+    \item Nova Compute Runs on the Hypervisor
+    \item Tokens included included in requests
+    \item Rogue VM Harvest Tokens
+    \end{itemize}
+  \item Hypervisor Compromise: Trusts
+    \begin{itemize}
+    \item Allow for a long term delegation
+    \item A rogue trust would by-pass the token expiry
+    \item Without Trusts, passwords will be copied around, which is even worse.
+    \item Easy to identify but you have to look
+    \end{itemize}
+  \item Authenticate via Token when fetching a token
+    \begin{itemize}
+    \item Risk
       \begin{itemize}
-        \item Any scope can be converted to another scope
-        \item Expiration is not extended
+      \item Any scope can be converted to another scope
+      \item Expiration is not extended
       \end{itemize}
     \item Why:
       \begin{itemize}
@@ -74,30 +86,11 @@
       \item Only allow unscoped to scoped transitions
       \item Requires a call to explicitly request a scoped token
       \end{itemize}
+    \end{itemize}
   \end{itemize}
 \end{frame}
 
-\section {Use of Tokens }
-
-\begin{frame}{Why Are Tokens on Hypervisor}
-  \begin{itemize}
-  \item Boot and Teardown
-    \begin{itemize}
-    \item Barbican, Glance, Cinder, Neutron
-    \end {itemize}
-  \item Attach (Cinder)
-  \item Periodic Refresh (Neutron)
-  \item Snapshot (Glance)
-  \end {itemize}
-\end {frame}
-
-
-\begin{frame}{Why Are Tokens on Hypervisor}
-  \begin{block}{}
-    \includegraphics[scale=0.3]{request-flow1.png}
-  \end{block}
-  http://ilearnstack.com/2013/04/26/
-\end {frame}
+\subsection {Use of Tokens }
 
 
 \begin{frame}{Big Tent Services that User Tokens}
@@ -182,8 +175,161 @@
 \end {frame}
 
 
+\begin{frame}{Why Are Tokens on Hypervisor}
+  \begin{itemize}
+  \item Boot and Teardown
+    \begin{itemize}
+    \item Barbican, Glance, Cinder, Neutron
+    \end {itemize}
+  \item Attach (Cinder)
+  \item Periodic Refresh (Neutron)
+  \item Snapshot (Glance)
+  \end {itemize}
+\end {frame}
 
-\section {Use Cases}
+
+\begin{frame}{Why Are Tokens on Hypervisor}
+  \begin{block}{}
+    \includegraphics[scale=0.3]{request-flow1.png}
+  \end{block}
+  http://ilearnstack.com/2013/04/26/
+\end {frame}
+
+\begin{frame}{Other Users}
+  Any third party application that drives OpenStack components uses tokens.
+\end {frame}
+
+
+\section {Design Considerations}
+
+
+\begin{frame}{Status Quo}
+  The current policy enforcement  varies greatly between services
+\end {frame}
+
+
+\subsection {Roles and Scopes}
+
+\begin{frame}{Scope of a Token}
+  \begin{itemize}
+  \item Most common role check is \textit{Admin} with no scope
+  \item Most policy does not Check Roles
+  \end{itemize}
+\end {frame}
+
+\begin{frame}{Role vs Scope}
+
+  Every Rule should have Scope section and Role Section
+  
+  \begin{itemize}
+  \item Matching Scope should not be customized
+    \begin{itemize}
+    \item  Engineering decision
+    \item  based on the object structure
+    \end{itemize}
+  \item Role Assigned to API should be customizable
+    \begin{itemize}
+    \item Chose the roles appropriate to the organization
+    \item Default to \textit{Admin} if not specified for target
+    \end{itemize}
+  \end{itemize}
+\end{frame}
+  
+
+\begin{frame}{Global Admin}
+  \begin{itemize}
+  \item Most stock policy files have an account to fix things
+    \begin{itemize}
+    \item Nova has it in code: nova/tree/nova/policy.py
+    \item return creds['is\_admin'] == self.expected
+    \item "os\_compute\_api:os-lock-server:unlock:unlock\_override": "rule:admin\_api",
+    \item "admin\_api": "is\_admin:True",
+    \end {itemize}
+  \item Keystone has  ADMIN\_TOKEN/OS\_SERVICE\_TOKEN
+  \item Check Role:admin without checking Scope
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Where is the Scope}
+  \begin{itemize}
+
+  \item project\_id in the URL
+    \begin{itemize}
+    \item Nova list servers
+    \item http://hostname:8774/v2/<project\_id>/servers/detail
+    \item Trove list databases for instance
+    \item https://hostname/v1.0/<project\_id>/instances/<instance\_id>/databases
+    \item Keystone grant role to user on project
+    \item PUT http://hostname:35357/projects/<project\_id>/users/<user\_id>/roles/<role\_id>
+    \item must confirm with database record
+    \end{itemize}
+
+  \item Use the scope from the token
+    \begin{itemize}
+    \item Glance image list
+    \item http://hostname/v1/images
+    \item Won't work with a global admin
+    \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Where is the Scope (Continued)}
+  \begin{itemize}    
+  \item Fetch object from Database
+    \begin{itemize}
+    \item Ceilometer Rules mostly have
+    \item "context\_is\_project": "project\_id:%(target.project\_id)s"
+    \item Keystone add user to group (Domain scoped)
+    \item PUT /groups/<group\_id>/users/<user\_id>
+    \end{itemize}
+
+  \item Object is not scoped to a project
+    \begin{itemize}
+    \item Keystone User owns Credentials and Trusts
+    \item Domains own projects
+    \item Barbican user owns secrets
+    \end{itemize}
+  \end{itemize}
+\end{frame}
+
+
+\begin{frame}Neutron Policy Rules{}
+  \begin{itemize}
+  \item "shared\_*":
+    \begin{itemize}
+    \item "field:networks:shared=True",
+    \item "field:firewalls:shared=True",
+    \item "field:firewall\_policies:shared=True",
+    \item "field:subnetpools:shared=True",
+    \item "field:address\_scopes:shared=True",
+    \end{itemize}
+  \item "get\_subnetpool":
+    \begin{itemize}
+    \item "rule:admin\_or\_owner or rule:shared\_subnetpools",
+    \end{itemize}
+  \item (unscoped) admin role check OR access to the API is global
+  \item Limited to read only.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}What is a Role?{}
+  \begin{itemize}
+    \item A label for a set of permissions across multiple services
+    \item But we have no way to share role information between services or endpoints with stock policy files
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Problems with Role Assignments today}
+  \begin{itemize}
+  \item If I can assign one role, I can assign any role
+  \item Admin role is not scoped to a project
+  \item If I can assign admin, I am admin
+  \item Need to restrict ability to assignment only the roles/scope a user has assigned to them.
+  \end{itemize}
+\end{frame}
+
+
+\subsection {Use Cases}
 
 \begin{frame}{Scope of a Token}
   \begin{itemize}
@@ -261,7 +407,9 @@
       \begin{itemize}
       \item Keystone
         \begin{itemize}
+        \item create (sub)project
         \item Assignments
+        \item Federation Mappings          
         \end{itemize}
 
       \item Neutron
@@ -274,7 +422,6 @@
     \end{column}
   \end{columns}
 \end{frame}
-
 
 \begin{frame}{Service Administration Use Cases}
   \begin{columns}[t,onlytextwidth]
@@ -297,149 +444,39 @@
         \item Roles
         \item Service Catalog 
         \item Policy
+        \item Identity Providers
         \end{itemize}
       \end{itemize}
     \end{column}
   \end{columns}
 \end{frame}
 
+\subsection {Constraints}
 
-\section {Design Considerations}
-
-\begin{frame}{Constraints}
+\begin{frame}{Things we can't break}
   \begin{itemize}
-  \item  Deployments expect the current stock policy files to work
+  \item Deployments expect the current stock policy files to work
   \item Global Admin to the rescue
   \item Where is the scope?
   \end{itemize}
 \end{frame}
 
 
-\begin{frame}{Role vs Scope}
-  \begin{itemize}
-  \item Matching Scope should not be customized
-    \begin{itemize}
-    \item  Engineering decision
-    \item  based on the object structure
-    \end{itemize}
-  \item Role Assigned to API should be customizable
-    \begin{itemize}
-    \item Chose the roles appropriate to the organization
-    \item Default to \textit{Admin} if not specified for target
-    \end{itemize}
-  \end{itemize}
-\end{frame}
-  
-
-\begin{frame}{Global Admin}
-  \begin{itemize}
-  \item Most stock policy files have an account to fix things
-   \begin{itemize}
-    \item Chose the roles appropriate to the organization
-    \item Default to \textit{Admin} if not specified for target
-    \end{itemize}
-  \end{itemize}
-\end{frame}
-  
-
-\begin{frame}{Global Admin}
-  \begin{itemize}
-  \item Most stock policy files have an account to fix things
-    \begin{itemize}
-    \item Nova has it in code: nova/tree/nova/policy.py
-    \item return creds['is\_admin'] == self.expected
-    \item "os\_compute\_api:os-lock-server:unlock:unlock\_override": "rule:admin\_api",
-    \item "admin\_api": "is\_admin:True",
-    \end {itemize}
-  \item Keystone has  ADMIN\_TOKEN/OS\_SERVICE\_TOKEN
-  \item Check Role:admin without checking Scope
-  \end{itemize}
-\end{frame}
-
-
-
-\begin{frame}{Where is the Scope}
-  \begin{itemize}
-
-  \item project\_id in the URL
-    \begin{itemize}
-    \item Nova list servers
-    \item http://hostname:8774/v2/<project\_id>/servers/detail
-    \item Trove list databases for instance
-    \item https://hostname/v1.0/<project\_id>/instances/<instance\_id>/databases
-    \item Keystone grant role to user on project
-    \item PUT http://hostname:35357/projects/<project\_id>/users/<user\_id>/roles/<role\_id>
-    \item must confirm with database record
-    \end{itemize}
-
-  \item Use the scope from the token
-    \begin{itemize}
-    \item Glance image list
-    \item http://hostname/v1/images
-    \item Won't work with a global admin
-    \end{itemize}
-  \end{itemize}
-\end{frame}
-
-\begin{frame}{Where is the Scope (Continued)}
-  \begin{itemize}
-
-    
-  \item Fetch object from Database
-    \begin{itemize}
-    \item Ceilometer Rules mostly have
-    \item "context\_is\_project": "project\_id:%(target.project\_id)s"
-    \item Keystone add user to group (Domain scoped)
-    \item PUT /groups/<group\_id>/users/<user\_id>
-    \end{itemize}
-
-  \item Object is not scoped to a project
-    \begin{itemize}
-    \item Keystone User owns Credentials and Trusts
-    \item Domains own projects
-    \item Barbican user owns secrets
-    \end{itemize}
-  \end{itemize}
-\end{frame}
-
-
-\begin{frame}Neutron Policy Rules{}
-  \begin{itemize}
-  \item "shared\_*":
-    \begin{itemize}
-    \item "field:networks:shared=True",
-    \item "field:firewalls:shared=True",
-    \item "field:firewall\_policies:shared=True",
-    \item "field:subnetpools:shared=True",
-    \item "field:address\_scopes:shared=True",
-    \end{itemize}
-  \item "get\_subnetpool":
-    \begin{itemize}
-    \item "rule:admin\_or\_owner or rule:shared\_subnetpools",
-    \end{itemize}
-  \item (unscoped) admin role check OR access to the API is global
-  \item Limited to read only.
-  \end{itemize}
-\end{frame}
-
-\begin{frame}What is a Role?{}
-  \begin{itemize}
-    \item A label for a set of permissions across multiple services
-    \item But we have no way to share role information between services or endpoints with stock policy files
-  \end{itemize}
-\end{frame}
-
-\begin{frame}{Problems with Role Assignments today}
-  \begin{itemize}
-  \item If I can assign one role, I can assign any role
-  \item Admin role is not scoped to a proejct
-  \item If I can assign admin, I am admin
-  \item Need to restrict ability to assignment only the roles/scope a user has assigned to them.
-  \end{itemize}
-\end{frame}
 
 
 \section {Dynamic Policy}
+
+
+\subsection {Mission}
+
+\begin{frame}{Goal}
+  \begin{itemize}
+  \item Minimize the damage that can be done with a stolen token:
+  \item A stolen token can only perform operations within the same class of use cases.
+  \end {itemize}
+\end {frame}
+
+\subsection {Overall Plan}
 
 
 \begin{frame}{Original Dynamic Policy Design}
@@ -489,7 +526,24 @@
 \end{frame}
 
 
-\begin{frame}{Why fetch by URLs}
+
+\begin{frame}{Fetching the right policy file}
+  \begin{itemize}
+  \item policy to endpoint mapping has been defined for a while
+  \item to use it an endpoint needs to know its own id.
+  \item Fallback from most to least explicit:
+    \begin{enumerate}
+    \item explicitly define endpoint\_id in the config tile
+    \item explicitly define URL in the config file, map to ID via service catalog
+    \item Use Incoming URL on first request to match the URL in the Service catalog.
+    \end{enumerate}
+  \item config/request\_url.startswith(endpoint.url)
+  \end{itemize}
+\end{frame}
+
+
+
+\begin{frame}{Why fetch by Endpoint}
   \begin{itemize}
   \item May not get a unified policy file
   \item Need to server separate policy for each service
@@ -540,6 +594,23 @@
     \begin{itemize}
     \item Bends the standard, but does not break it
     \end{itemize}
+  \end{itemize}
+\end{frame}
+
+
+\begin{frame}{Policy Endpoint Extension}
+  
+  \begin{itemize}
+  \item Existing code
+  \item Associate a policy (by id) with an entry in the service catalog
+  \item Resolved from most specific
+    \begin{enumerate}
+    \item Endpoint
+    \item Service
+    \item Region
+    \item Default
+    \end{enumerate}
+  \item But what do we use for default?
   \end{itemize}
 \end{frame}
 
